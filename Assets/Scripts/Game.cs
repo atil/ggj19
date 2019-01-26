@@ -57,7 +57,7 @@ public class Game : MonoBehaviour
     {
         if (_gameOver)
         {
-            if (Input.GetKeyDown(KeyCode.Space))
+            if (Input.GetButtonDown("Restart"))
             {
                 UnityEngine.SceneManagement.SceneManager.LoadScene("GameScene");
             }
