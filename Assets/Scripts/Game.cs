@@ -102,6 +102,12 @@ public class Game : MonoBehaviour
         foreach (var bit in _bits)
         {
             bit.transform.position += dir * _bitSpeed * Time.deltaTime;
+            LineRenderer lr = bit.GetComponent<LineRenderer>();
+            lr.SetPositions(new[]
+            {
+                bit.transform.position,
+                bit.transform.position - dir * 0.5f
+            });
         }
 
         List<GameObject> removedBits = new List<GameObject>();
