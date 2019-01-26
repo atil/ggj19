@@ -5,12 +5,17 @@ using UnityEngine;
 
 public class Game : MonoBehaviour
 {
+    [Header("Resources")]
     public AnimationCurve SuccEffect;
     public AnimationCurve GameOverEffect;
+    public GameObject BitPrefab;
+    public AudioClip Blip1;
+    public AudioClip Blip2;
+    public AudioClip MissBlip;
+    public AudioClip Shatter;
 
     [Space]
-
-    public GameObject BitPrefab;
+    public AudioSource AudioSource;
 
     [Header("A")]
     public BoxCollider2D HomeA;
@@ -39,7 +44,6 @@ public class Game : MonoBehaviour
 
     private void Start()
     {
-
         UpdateReserveRoot(ReserveRootA, _reserveBitCountA);
         UpdateReserveRoot(ReserveRootB, _reserveBitCountB);
     }
@@ -59,23 +63,28 @@ public class Game : MonoBehaviour
         if (_goingRight)
         {
             Move("XboxA", "XboxB", Vector3.right, HomeB, SpawnPointA, PressZoneB,
+                Blip1, Blip2,
                 ReserveRootA, ReserveRootB,
                 ref _reserveBitCountA, ref _reserveBitCountB);
         }
         else
         {
             Move("XboxB", "XboxA", Vector3.left, HomeA, SpawnPointB, PressZoneA, 
+                Blip2, Blip1,
                 ReserveRootB, ReserveRootA,
                 ref _reserveBitCountB, ref _reserveBitCountA);
         }
     }
 
     private void Move(string sendKey, string recvKey, Vector3 dir, BoxCollider2D targetHome, Transform spawnPoint, BoxCollider2D pressZone,
+        AudioClip sendSfx, AudioClip recvSfx,
         Transform senderReserveRoot, Transform recvReserveRoot,
         ref int sendReserv, ref int recvReserv)
     {
         if (Input.GetButtonDown(sendKey) && sendReserv > 0)
         {
+            AudioSource.PlayOneShot(sendSfx);
+
             sendReserv--;
             UpdateReserveRoot(senderReserveRoot, sendReserv);
             var bit = Instantiate(BitPrefab, spawnPoint.position, Quaternion.identity);
@@ -90,6 +99,8 @@ public class Game : MonoBehaviour
         List<GameObject> removedBits = new List<GameObject>();
         if (Input.GetButtonDown(recvKey))
         {
+            AudioSource.PlayOneShot(recvSfx);
+
             bool succ = false;
             foreach (var bit in _bits)
             {
