@@ -20,12 +20,14 @@ public class Game : MonoBehaviour
     public AudioSource AudioSource;
 
     [Header("A")]
+    public Transform RootA;
     public BoxCollider2D HomeA;
     public Transform SpawnPointA;
     public BoxCollider2D PressZoneA;
     public Transform ReserveRootA;
 
     [Header("B")]
+    public Transform RootB;
     public BoxCollider2D HomeB;
     public Transform SpawnPointB;
     public BoxCollider2D PressZoneB;
@@ -47,6 +49,8 @@ public class Game : MonoBehaviour
     {
         UpdateReserveRoot(ReserveRootA, _reserveBitCountA);
         UpdateReserveRoot(ReserveRootB, _reserveBitCountB);
+
+        StartCoroutine(SwitchHomesEffect(RootA, RootB));
     }
 
     private void Update()
@@ -64,6 +68,7 @@ public class Game : MonoBehaviour
         if (_goingRight)
         {
             Move("XboxA", "XboxB", Vector3.right, HomeB, SpawnPointA, PressZoneB,
+                RootA, RootB,
                 Blip1, Blip2,
                 ReserveRootA, ReserveRootB,
                 ref _reserveBitCountA, ref _reserveBitCountB);
@@ -71,6 +76,7 @@ public class Game : MonoBehaviour
         else
         {
             Move("XboxB", "XboxA", Vector3.left, HomeA, SpawnPointB, PressZoneA, 
+                RootB, RootA,
                 Blip2, Blip1,
                 ReserveRootB, ReserveRootA,
                 ref _reserveBitCountB, ref _reserveBitCountA);
@@ -78,6 +84,7 @@ public class Game : MonoBehaviour
     }
 
     private void Move(string sendKey, string recvKey, Vector3 dir, BoxCollider2D targetHome, Transform spawnPoint, BoxCollider2D pressZone,
+        Transform sendRoot, Transform recvRoot,
         AudioClip sendSfx, AudioClip recvSfx,
         Transform senderReserveRoot, Transform recvReserveRoot,
         ref int sendReserv, ref int recvReserv)
@@ -121,9 +128,13 @@ public class Game : MonoBehaviour
                 // Bosa basti
                 PlaySound(MissBlip);
 
-                // Reduce reserve count
-                recvReserv = Mathf.Max(recvReserv - 1, 0);
-                UpdateReserveRoot(recvReserveRoot, recvReserv);
+                if (recvReserv > 0)
+                {
+                    // Reduce reserve count
+                    recvReserv = Mathf.Max(recvReserv - 1, 0);
+                    Vector3 lastBitPos = UpdateReserveRoot(recvReserveRoot, recvReserv);
+                    StartCoroutine(RunPlusOneEffectAt(lastBitPos, "-1"));
+                }
             }
         }
 
@@ -146,13 +157,37 @@ public class Game : MonoBehaviour
         {
             recvReserv++;
 
+            sendRoot.localScale = Vector3.one;
+            recvRoot.localScale = Vector3.one * 0.8f;
+
             Vector3 lastBitPos = UpdateReserveRoot(recvReserveRoot, recvReserv);
-            StartCoroutine(RunPlusOneEffectAt(lastBitPos));
+            StartCoroutine(RunPlusOneEffectAt(lastBitPos, "+1"));
+
+            StartCoroutine(SwitchHomesEffect(recvRoot, sendRoot));
 
             _goingRight = !_goingRight;
         }
     }
 
+    private IEnumerator SwitchHomesEffect(Transform toBack, Transform toFront)
+    {
+        const float duration = 0.5f;
+        Vector3 bigScale = Vector3.one;
+        Vector3 smallScale = Vector3.one * 0.8f;
+
+        for (float f = 0; f < duration; f += Time.deltaTime)
+        {
+            float t = SuccEffect.Evaluate(f / duration);
+            toBack.transform.localScale = Vector3.Lerp(bigScale, smallScale, t);
+            toFront.transform.localScale = Vector3.Lerp(smallScale, bigScale, t);
+            yield return null;
+        }
+
+        toBack.transform.localScale = smallScale;
+        toFront.transform.localScale = bigScale;
+    }
+
+    #region Home Effects
     private Vector3 UpdateReserveRoot(Transform root, int reservCount)
     {
         for (int i = 0; i < root.childCount; i++)
@@ -174,13 +209,18 @@ public class Game : MonoBehaviour
         Vector3 startScale = BitPrefab.transform.localScale * 3;
         Vector3 targetScale = BitPrefab.transform.localScale;
         GameObject go = Instantiate(BitPrefab, initPos, Quaternion.identity);
-
+        go.transform.SetParent(root, true);
         SpriteRenderer r = go.GetComponent<SpriteRenderer>();
         Color startColor = new Color(r.color.r, r.color.g, r.color.b, 0);
         Color targetColor = r.color;
 
         for (float f = 0; f < duration; f += Time.deltaTime)
         {
+            if (go == null)
+            {
+                yield break;
+            }
+
             float t = SuccEffect.Evaluate(f / duration);
             go.transform.localScale = Vector3.Lerp(startScale, targetScale, t);
             r.color = Color.Lerp(startColor, targetColor, t);
@@ -212,12 +252,13 @@ public class Game : MonoBehaviour
         Destroy(go);
     }
 
-    private IEnumerator RunPlusOneEffectAt(Vector3 initPos)
+    private IEnumerator RunPlusOneEffectAt(Vector3 initPos, string text)
     {
         const float duration = 1.25f;
         Vector3 endPos = initPos + Vector3.down * 0.5f;
         GameObject go = Instantiate(PlusOnePrefab, initPos, Quaternion.identity);
         TMPro.TextMeshPro r = go.GetComponent<TMPro.TextMeshPro>();
+        r.text = text;
         Color startColor = r.color;
         Color targetColor = new Color(startColor.r, startColor.g, startColor.b, 0);
 
@@ -231,7 +272,9 @@ public class Game : MonoBehaviour
 
         Destroy(go);
     }
+    #endregion
 
+    #region Game Over
     private void RunGameOverEffects(BoxCollider2D shatteredHome, Vector3 shatterPos)
     {
         _gameOver = true;
@@ -319,11 +362,10 @@ public class Game : MonoBehaviour
         }
 
     }
+    #endregion
 
     private void PlaySound(AudioClip clip)
     {
-        return; // i'm listening to music
-
         AudioSource.PlayOneShot(clip);
     }
 }
