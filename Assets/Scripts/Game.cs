@@ -44,6 +44,7 @@ public class Game : MonoBehaviour
     private int _reserveBitCountB = 0;
     private float _bitSpeed = 2.5f;
     private bool _gameOver = false;
+    private bool _canSend = true;
 
     private void Start()
     {
@@ -89,7 +90,7 @@ public class Game : MonoBehaviour
         Transform senderReserveRoot, Transform recvReserveRoot,
         ref int sendReserv, ref int recvReserv)
     {
-        if (Input.GetButtonDown(sendKey) && sendReserv > 0)
+        if (Input.GetButtonDown(sendKey) && _canSend && sendReserv > 0)
         {
             PlaySound(sendSfx);
 
@@ -170,6 +171,7 @@ public class Game : MonoBehaviour
             StartCoroutine(RunPlusOneEffectAt(lastBitPos, "+1"));
 
             StartCoroutine(SwitchHomesEffect(recvRoot, sendRoot));
+            StartCoroutine(StartTurnCooldown());
 
             _goingRight = !_goingRight;
         }
@@ -191,6 +193,13 @@ public class Game : MonoBehaviour
 
         toBack.transform.localScale = smallScale;
         toFront.transform.localScale = bigScale;
+    }
+
+    private IEnumerator StartTurnCooldown()
+    {
+        _canSend = false;
+        yield return new WaitForSeconds(0.5f);
+        _canSend = true;
     }
 
     #region Home Effects
