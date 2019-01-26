@@ -6,31 +6,36 @@ using UnityEngine;
 public class Game : MonoBehaviour
 {
     public AnimationCurve SuccEffect;
+    public AnimationCurve GameOverEffect;
 
     [Space]
 
     public GameObject BitPrefab;
 
-    [Space]
-
+    [Header("A")]
     public BoxCollider2D HomeA;
     public Transform SpawnPointA;
     public BoxCollider2D PressZoneA;
     public Transform ReserveRootA;
 
-    [Space]
-
+    [Header("B")]
     public BoxCollider2D HomeB;
     public Transform SpawnPointB;
     public BoxCollider2D PressZoneB;
     public Transform ReserveRootB;
 
+    [Header("GameOver")]
+    public SpriteRenderer BlackOverlay;
+    public TMPro.TextMeshPro GameOverText;
+
     private bool _goingRight = true;
     private List<GameObject> _bits = new List<GameObject>();
+
 
     private int _reserveBitCountA = 5;
     private int _reserveBitCountB = 0;
     private float _bitSpeed = 2.5f;
+    private bool _gameOver = false;
 
     private void Start()
     {
@@ -41,25 +46,35 @@ public class Game : MonoBehaviour
 
     private void Update()
     {
+        if (_gameOver)
+        {
+            if (Input.GetKeyDown(KeyCode.Space))
+            {
+                UnityEngine.SceneManagement.SceneManager.LoadScene("GameScene");
+            }
+
+            return;
+        }
+
         if (_goingRight)
         {
-            Move(KeyCode.A, KeyCode.L, Vector3.right, HomeB, SpawnPointA, PressZoneB,
+            Move("XboxA", "XboxB", Vector3.right, HomeB, SpawnPointA, PressZoneB,
                 ReserveRootA, ReserveRootB,
                 ref _reserveBitCountA, ref _reserveBitCountB);
         }
         else
         {
-            Move(KeyCode.L, KeyCode.A, Vector3.left, HomeA, SpawnPointB, PressZoneA, 
+            Move("XboxB", "XboxA", Vector3.left, HomeA, SpawnPointB, PressZoneA, 
                 ReserveRootB, ReserveRootA,
                 ref _reserveBitCountB, ref _reserveBitCountA);
         }
     }
 
-    private void Move(KeyCode sendKey, KeyCode recvKey, Vector3 dir, BoxCollider2D targetHome, Transform spawnPoint, BoxCollider2D pressZone,
+    private void Move(string sendKey, string recvKey, Vector3 dir, BoxCollider2D targetHome, Transform spawnPoint, BoxCollider2D pressZone,
         Transform senderReserveRoot, Transform recvReserveRoot,
         ref int sendReserv, ref int recvReserv)
     {
-        if (Input.GetKeyDown(sendKey) && sendReserv > 0)
+        if (Input.GetButtonDown(sendKey) && sendReserv > 0)
         {
             sendReserv--;
             UpdateReserveRoot(senderReserveRoot, sendReserv);
@@ -73,7 +88,7 @@ public class Game : MonoBehaviour
         }
 
         List<GameObject> removedBits = new List<GameObject>();
-        if (Input.GetKeyDown(recvKey))
+        if (Input.GetButtonDown(recvKey))
         {
             bool succ = false;
             foreach (var bit in _bits)
@@ -92,10 +107,7 @@ public class Game : MonoBehaviour
             if (!succ)
             {
                 // Bosa basti
-                // TODO: Decide:
-                // - Speed up temporary?
-                // - Reduce reserve count?
-
+                // TODO: Reduce reserve count
             }
         }
 
@@ -105,7 +117,7 @@ public class Game : MonoBehaviour
             {
                 // Girdi
                 removedBits.Add(bit);
-                recvReserv = 0;
+                RunGameOverEffect(targetHome, bit.transform.position);
             }
         }
         foreach (var bit in removedBits)
@@ -135,8 +147,8 @@ public class Game : MonoBehaviour
 
     private IEnumerator RunSpawnEffectAt(Vector3 initPos, Transform root)
     {
-        const float duration = 0.25f;
-        Vector3 startScale = BitPrefab.transform.localScale * 2;
+        const float duration = 0.05f;
+        Vector3 startScale = BitPrefab.transform.localScale * 3;
         Vector3 targetScale = BitPrefab.transform.localScale;
         GameObject go = Instantiate(BitPrefab, initPos, Quaternion.identity);
 
@@ -175,5 +187,73 @@ public class Game : MonoBehaviour
         }
 
         Destroy(go);
+    }
+
+    private void RunGameOverEffect(BoxCollider2D shatteredHome, Vector3 shatterPos)
+    {
+        _gameOver = true;
+        Explodable exp = shatteredHome.GetComponent<Explodable>();
+        exp.explode();
+        StartCoroutine(WaitAndExplodeAt(shatterPos));
+        StartCoroutine(RunGameOverVfx());
+    }
+
+    private IEnumerator RunGameOverVfx()
+    {
+        const float duration = 1f;
+
+        GameOverText.gameObject.SetActive(true);
+        BlackOverlay.gameObject.SetActive(true);
+
+        GameOverText.text = _goingRight ? "LEFT WON" : "RIGHT WON";
+
+        Color startColor = new Color(BlackOverlay.color.r, BlackOverlay.color.g, BlackOverlay.color.b, 0);
+        Color targetColor = BlackOverlay.color;
+
+        for (float f = 0; f < duration; f += Time.deltaTime)
+        {
+            float t = GameOverEffect.Evaluate(f / duration);
+            BlackOverlay.color = Color.Lerp(startColor, targetColor, t);
+            yield return null;
+        }
+    }
+
+    private IEnumerator WaitAndExplodeAt(Vector3 pos)
+    {
+        yield return new WaitForFixedUpdate();
+        const float radius = 5;
+        const float explosionForce = 100f;
+        const float upliftModifier = 3f;
+
+        Collider2D[] colliders = Physics2D.OverlapCircleAll(pos, radius);
+
+        foreach (Collider2D coll in colliders)
+        {
+            Rigidbody2D rb = coll.GetComponent<Rigidbody2D>();
+            if (rb != null)
+            {
+                rb.gravityScale = 0f;
+                rb.drag = 1f;
+                AddExplosionForce(rb, explosionForce, transform.position, radius, upliftModifier);
+            }
+        }
+    }
+
+    private void AddExplosionForce(Rigidbody2D body, float explosionForce, Vector3 explosionPosition, float explosionRadius, float upliftModifier = 0)
+    {
+        var dir = (body.transform.position - explosionPosition);
+        float wearoff = 1 - (dir.magnitude / explosionRadius);
+        Vector3 baseForce = dir.normalized * explosionForce * wearoff;
+        baseForce.z = 0;
+        body.AddForce(baseForce);
+
+        if (3 != 0)
+        {
+            float upliftWearoff = 1 - upliftModifier / explosionRadius;
+            Vector3 upliftForce = Vector2.up * explosionForce * upliftWearoff;
+            upliftForce.z = 0;
+            body.AddForce(upliftForce);
+        }
+
     }
 }
